@@ -1,45 +1,74 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+block_cipher = None
+
+# Hidden imports that PyInstaller might miss
+hidden_imports = [
+    'wsdiscovery',
+    'wsdiscovery.daemon',
+    'wsdiscovery.actions',
+    'wsdiscovery.threaded',
+    'onvif',
+    'onvif.client',
+    'zeep',
+    'zeep.wsdl',
+    'zeep.xsd',
+    'zeep.transports',
+    'lxml',
+    'lxml.etree',
+    'lxml._elementpath',
+    'urllib3',
+    'requests',
+    'certifi',
+]
 
 a = Analysis(
-    ['camera_gui.py'],
+    ['camera_gui_fixed.py'],
     pathex=[],
     binaries=[],
-    datas=[('ffprobe.exe', '.')],
-    hiddenimports=[],
+    datas=[
+        ('ffprobe.exe', '.'),  # Include ffprobe.exe in the bundle
+    ],
+    hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'matplotlib',
+        'numpy',
+        'pandas',
+        'scipy',
+        'PIL',
+        'PyQt5',
+        'PyQt6',
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
     noarchive=False,
-    optimize=0,
 )
-pyz = PYZ(a.pure)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='CameraFinder',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,  # No console window
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='NONE',
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='CameraFinder',
+    icon=None,  # You can add an icon file here
 )
