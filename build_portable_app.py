@@ -95,6 +95,7 @@ def organize_output():
     if os.path.exists(dist_folder):
         # Remove old portable folder if exists
         if os.path.exists(portable_folder):
+            # Remove old portable folder if it exists (clean up previous builds)
             shutil.rmtree(portable_folder)
         
         # Move dist folder to portable folder
@@ -187,6 +188,7 @@ def main():
     print("📦 You can copy this folder to any Windows computer")
     print("🚀 Run CameraFinder.exe to start the application")
     print("\nNo installation needed - it's completely portable!")
+    print("\n" + "="*50)
 
 if __name__ == "__main__":
     main()

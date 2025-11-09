@@ -4,3 +4,5 @@ CameraFinder_Portable
 __pycache__
 *.pyc
 *.exe
+main.py
+*.md
