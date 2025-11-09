@@ -1,0 +1,6 @@
+.venv
+build
+CameraFinder_Portable
+__pycache__
+*.pyc
+*.exe
