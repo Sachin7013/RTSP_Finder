@@ -31,16 +31,33 @@ try:
     from wsdiscovery import WSDiscovery
     from wsdiscovery.actions import *
     WSDISCOVERY_AVAILABLE = True
-except ImportError:
+    print("✅ WS-Discovery library loaded successfully")
+except ImportError as e:
     WSDISCOVERY_AVAILABLE = False
-    print("WS-Discovery not available - will use direct IP scanning")
+    print(f"⚠️ WS-Discovery not available: {e}")
+    print("Will use direct IP scanning instead")
 
 try:
     from onvif import ONVIFCamera
     ONVIF_AVAILABLE = True
-except ImportError:
+    print("✅ ONVIF library loaded successfully")
+    
+    # Verify WSDL files are accessible (critical for exe)
+    import onvif
+    onvif_path = os.path.dirname(onvif.__file__)
+    wsdl_path = os.path.join(onvif_path, 'wsdl')
+    if os.path.exists(wsdl_path):
+        wsdl_files = [f for f in os.listdir(wsdl_path) if f.endswith('.wsdl')]
+        print(f"✅ Found {len(wsdl_files)} ONVIF WSDL files")
+    else:
+        print(f"⚠️ ONVIF WSDL folder not found at: {wsdl_path}")
+        print("Camera discovery via ONVIF may not work!")
+except ImportError as e:
     ONVIF_AVAILABLE = False
-    print("ONVIF not available - will use common RTSP paths only")
+    print(f"⚠️ ONVIF not available: {e}")
+    print("Will use common RTSP paths only")
+except Exception as e:
+    print(f"⚠️ ONVIF loaded but WSDL check failed: {e}")
 
 
 class CameraFinderApp:
@@ -67,16 +84,37 @@ class CameraFinderApp:
         # For exe bundle
         if hasattr(sys, '_MEIPASS'):
             bundled_ffprobe = os.path.join(sys._MEIPASS, "ffprobe.exe")
+            print(f"Checking bundled ffprobe: {bundled_ffprobe}")
             if os.path.exists(bundled_ffprobe):
+                print("✅ Found bundled ffprobe")
                 return bundled_ffprobe
+            else:
+                print("⚠️ Bundled ffprobe not found")
         
-        # Check local folder
-        local_ffprobe = os.path.join(os.path.dirname(__file__), "ffprobe.exe")
+        # Check local folder (current directory)
+        local_ffprobe = "ffprobe.exe"
         if os.path.exists(local_ffprobe):
-            return local_ffprobe
+            print(f"✅ Found local ffprobe: {os.path.abspath(local_ffprobe)}")
+            return os.path.abspath(local_ffprobe)
+        
+        # Check script directory
+        script_dir_ffprobe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ffprobe.exe")
+        if os.path.exists(script_dir_ffprobe):
+            print(f"✅ Found script dir ffprobe: {script_dir_ffprobe}")
+            return script_dir_ffprobe
             
         # Fall back to system PATH
+        print("⚠️ Using system PATH ffprobe")
         return "ffprobe"
+
+    # def resource_path(relative_path):
+    #     """Return absolute path to resource, works for dev and PyInstaller onefile."""
+    #     if getattr(sys, "frozen", False):
+    #         # PyInstaller bundles files in _MEIPASS
+    #         base_path = sys._MEIPASS
+    #     else:
+    #         base_path = os.path.abspath(os.path.dirname(__file__))
+    #     return os.path.join(base_path, relative_path)    
         
     def create_widgets(self):
         """Create the GUI elements"""
@@ -295,6 +333,9 @@ class CameraFinderApp:
         devices = []
         self.update_results("🔍 Scanning local network IPs...\n")
         
+#=======================================================================
+# dynamically gets your local IP and scans that subnet
+#=======================================================================
         # Get local IP to determine subnet
         local_ip = self.get_local_ip()
         if not local_ip:
@@ -394,18 +435,39 @@ class CameraFinderApp:
             except:
                 pass
         
-        # Common RTSP URL patterns
-        rtsp_port = 554
-        common_paths = [
-            f"rtsp://{self.username}:{self.password}@{host}:{rtsp_port}/",
-            f"rtsp://{self.username}:{self.password}@{host}:{rtsp_port}/stream1",
-            f"rtsp://{self.username}:{self.password}@{host}:{rtsp_port}/cam/realmonitor?channel=1&subtype=0",
-            f"rtsp://{self.username}:{self.password}@{host}:{rtsp_port}/h264",
-            f"rtsp://{self.username}:{self.password}@{host}:{rtsp_port}/onvif1",
-            f"rtsp://{self.username}:{self.password}@{host}:{rtsp_port}/live.sdp",
-            f"rtsp://{self.username}:{self.password}@{host}:{rtsp_port}/Streaming/Channels/101",
+        # Common RTSP URL patterns - try multiple ports and paths
+        # Based on successful discoveries
+        # Order matters! More specific/unique paths first
+        common_ports = [554, 5543, 8554]  # Common RTSP ports
+        common_paths_list = [
+            # Most specific paths first (your working cameras)
+            "/ch0_0.264",
+            "/live/channel0",
+            "/ch0_0.h264",
+            "/ch0_1.264",
+            # Hikvision/Dahua specific
+            "/Streaming/Channels/101",
+            "/Streaming/Channels/102",
+            "/cam/realmonitor?channel=1&subtype=0",
+            # Common generic paths
+            "/stream1",
+            "/stream2",
+            "/h264",
+            "/h265",
+            "/onvif1",
+            "/onvif2",
+            "/live.sdp",
+            "/video.mjpg",
+            "/video.h264",
+            "/1",
+            "/",  # Root path last (least specific)
         ]
-        urls.extend(common_paths)
+        
+        # Try different port and path combinations
+        for rtsp_port in common_ports:
+            for path in common_paths_list:
+                url = f"rtsp://{self.username}:{self.password}@{host}:{rtsp_port}{path}"
+                urls.append(url)
         
         return urls
         
@@ -426,6 +488,11 @@ class CameraFinderApp:
     def test_rtsp_stream(self, url):
         """Test if RTSP stream works using ffprobe"""
         try:
+            # Check if ffprobe exists
+            if not os.path.exists(self.ffprobe_path):
+                self.update_results(f"  ⚠️ ffprobe not found at: {self.ffprobe_path}\n")
+                return False
+                
             cmd = [
                 self.ffprobe_path,
                 "-rtsp_transport", "tcp",
@@ -435,9 +502,13 @@ class CameraFinderApp:
                 "-show_entries", "stream=codec_type",
                 "-print_format", "json"
             ]
-            result = subprocess.run(cmd, capture_output=True, timeout=3)
+            result = subprocess.run(cmd, capture_output=True, timeout=5)  # Increased timeout
             return result.returncode == 0
-        except:
+        except subprocess.TimeoutExpired:
+            return False
+        except Exception as e:
+            # Log error for debugging
+            self.update_results(f"  ⚠️ ffprobe error: {str(e)}\n")
             return False
             
     def check_port(self, host, port, timeout=0.5):

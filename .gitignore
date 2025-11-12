@@ -1,8 +1,9 @@
 .venv
-build
 CameraFinder_Portable
 __pycache__
 *.pyc
 *.exe
 main.py
 *.md
+build
+dist
